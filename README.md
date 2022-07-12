@@ -1,2 +1,2 @@
 # erc_22_embedded
-rover 21.75
+Embedded codes of the left-right throttle and led indicator systems. 
