@@ -5,10 +5,7 @@
 #include "std_msgs/Float64MultiArray.h"
 
 #define MOTOR_NUM 2
-#define CURRENT_COEFF 6
 #define RPM_COEFF 10000
-
-//RIGHT NOW IT'S ON DUTY CYCLE or CURRENT MODE
 
 //UART ports
 HardwareSerial RFserial(PC5, PC4);
@@ -19,12 +16,14 @@ VescUart RFmotor;
 VescUart RBmotor;
 
 //Standart variables
-float right_motors_command_float_array[MOTOR_NUM];
-float right_motors_current_command_float_array[MOTOR_NUM];
+float right_front_motor_speed;
+float right_back_motor_speed;
+unsigned long callback_start_time;
+//angel variable
+float angle;
 
 //ROS variables
 std_msgs::Float64MultiArray right_motors_feedback_multiarray;
-std_msgs::Float64MultiArray right_motors_command_multiarray;
 
 //Function declarations
 void rightMotorsCallback(const std_msgs::Float64MultiArray &drive_system_command_multiarray);
@@ -52,32 +51,39 @@ void setup() {
   right_motors_feedback_multiarray.data=(float *)malloc(sizeof(float)*MOTOR_NUM);  
   right_motors_feedback_multiarray.data_length=MOTOR_NUM;
 
-  right_motors_command_multiarray.data=(float *)malloc(sizeof(float)*MOTOR_NUM);  
-  right_motors_command_multiarray.data_length=MOTOR_NUM;
+  callback_start_time=millis();
 }
 
 void loop() {
   nh.spinOnce();
   delay(1);
 
-  RFmotor.setDuty(right_motors_command_float_array[0]);
-  RBmotor.setDuty(right_motors_command_float_array[1]);
+  unsigned long loop_start_time=millis();
   
-  /*
-  RFmotor.setCurrent(right_motors_current_command_float_array[0]);
-  RFmotor.setCurrent(right_motors_current_command_float_array[1]);
-  */
-  /*
-  RFmotor.setRPM(right_motors_command_float_array[0]);
-  RBmotor.setRPM(right_motors_command_float_array[1]);
-  */
+  if(!nh.connected() || (loop_start_time-callback_start_time)>500){
+    RFmotor.setRPM(0);
+    RBmotor.setRPM(0);
+  }
+
+
+  //Brake according to the ramp angle
+  else if((nh.connected()) && fabs(right_front_motor_speed) <= 2 && fabs(right_back_motor_speed) <= 2 && angle>5)
+  {
+    RFmotor.setHandBrakeCurrent(6); 
+    RBmotor.setHandBrakeCurrent(6);
+  }
+
+  else{
+    RFmotor.setRPM(right_front_motor_speed);
+    RBmotor.setRPM(right_back_motor_speed);
+  }
 }
 
 void rightMotorsCallback(const std_msgs::Float64MultiArray &drive_system_command_multiarray){
-  for(int motor_counter=0;motor_counter<MOTOR_NUM;motor_counter++){
-    right_motors_command_float_array[motor_counter]=drive_system_command_multiarray.data[1];
-    right_motors_current_command_float_array[motor_counter]=drive_system_command_multiarray.data[1]*CURRENT_COEFF;
-  }
+  callback_start_time=millis();
+  angle = drive_system_command_multiarray.data[4];
+  right_front_motor_speed = drive_system_command_multiarray.data[2]*RPM_COEFF;
+  right_back_motor_speed = drive_system_command_multiarray.data[3]*RPM_COEFF;
 
   if(RFmotor.getVescValues() && RBmotor.getVescValues()){
     right_motors_feedback_multiarray.data[0]=float(RFmotor.data.rpm/70);
